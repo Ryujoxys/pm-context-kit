@@ -1,8 +1,8 @@
 interface:
   display_name: "Code Context"
-  short_description: "PM-safe read-only code understanding"
+  short_description: "PM-facing code research workflow"
   brand_color: "#2563EB"
-  default_prompt: "Use $code-context to validate a product requirement against the current system behavior."
+  default_prompt: "Use $code-context to research current system behavior before writing product requirements."
 
 dependencies:
   tools:
