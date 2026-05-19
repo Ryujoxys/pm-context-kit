@@ -1,0 +1,18 @@
+{
+  "mcpServers": {
+    "code-context": {
+      "command": "uv",
+      "args": [
+        "run",
+        "--project",
+        "/absolute/path/to/pm-context-kit/server",
+        "code-context-mcp"
+      ],
+      "env": {
+        "CODE_CONTEXT_REPOS_ROOT": "/absolute/path/to/pm-context-kit/repos",
+        "CODE_CONTEXT_CONFIG": "/absolute/path/to/pm-context-kit/config/repos.yaml",
+        "CODE_CONTEXT_VISIBILITY_CONFIG": "/absolute/path/to/pm-context-kit/config/visibility.yaml"
+      }
+    }
+  }
+}

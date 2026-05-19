@@ -1,0 +1,35 @@
+name: pm-context-kit
+
+services:
+  code-context-mcp:
+    build: ../server
+    container_name: code-context-mcp
+    restart: unless-stopped
+    command: ["--transport", "streamable-http"]
+    ports:
+      - "${CODE_CONTEXT_MCP_PORT:-8000}:8000"
+    environment:
+      - CODE_CONTEXT_MCP_HOST=0.0.0.0
+      - CODE_CONTEXT_MCP_PORT=8000
+      - CODE_CONTEXT_REPOS_ROOT=/repos
+      - CODE_CONTEXT_CONFIG=/config/repos.yaml
+      - CODE_CONTEXT_VISIBILITY_CONFIG=/config/visibility.yaml
+    volumes:
+      - ../config:/config:ro
+      - ../repos:/repos:ro
+    read_only: true
+    cap_drop: ["ALL"]
+    security_opt:
+      - no-new-privileges:true
+
+  repo-sync:
+    build: ../sync
+    container_name: code-context-repo-sync
+    environment:
+      - CODE_CONTEXT_REPOS_ROOT=/repos
+      - CODE_CONTEXT_CONFIG=/config/repos.yaml
+      - ORDER_SERVICE_GIT_TOKEN=${ORDER_SERVICE_GIT_TOKEN:-}
+      - ORDER_SERVICE_GIT_USERNAME=${ORDER_SERVICE_GIT_USERNAME:-}
+    volumes:
+      - ../config:/config:ro
+      - ../repos:/repos

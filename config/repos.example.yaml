@@ -1,0 +1,40 @@
+# Repository metadata and sync sources.
+# Do not put secrets here. Reference environment variables instead.
+#
+# First run:
+#   cp config/repos.example.yaml config/repos.yaml
+#   edit config/repos.yaml
+#   uv run --project sync code-context-sync-once
+
+repositories:
+  - name: order-service
+    provider: git
+    url: https://git.example.com/product/order-service.git
+    ssh_url: git@git.example.com:product/order-service.git
+    local_path: product/order-service
+    branch: main
+    tags: [order, refund, payment]
+    description: Example order service used to demonstrate PM-facing code context.
+    owner: product-platform
+    auth:
+      # Supported modes:
+      # - none: public HTTPS or local file path
+      # - basic: HTTPS username + token as password
+      # - token_header: Authorization: token <token>
+      # - bearer: Authorization: Bearer <token>
+      # - ssh: use ssh_url and the current SSH agent/key setup
+      mode: basic
+      token_env: ORDER_SERVICE_GIT_TOKEN
+      username_env: ORDER_SERVICE_GIT_USERNAME
+
+  - name: user-center
+    provider: git
+    url: https://github.com/example-org/user-center.git
+    local_path: platform/user-center
+    branch: main
+    tags: [user, auth]
+    description: Example user account service.
+    owner: platform
+    auth:
+      mode: none
+

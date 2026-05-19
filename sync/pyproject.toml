@@ -1,0 +1,15 @@
+[project]
+name = "code-context-sync"
+version = "0.1.0"
+description = "Repository sync utility for PM Context Kit."
+requires-python = ">=3.11"
+dependencies = [
+    "pyyaml>=6.0.0,<7",
+]
+
+[project.scripts]
+code-context-sync-once = "code_context_sync.sync_once:main"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"

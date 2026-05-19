@@ -1,0 +1,45 @@
+# Visibility policy for code_context_mcp.
+# This is enforced by the MCP tools, not just by prompts.
+#
+# First run:
+#   cp config/visibility.example.yaml config/visibility.yaml
+#   edit config/visibility.yaml
+#
+# Rules are evaluated per repository:
+# - allow defaults to ["**"] when omitted.
+# - deny always wins over allow.
+# - patterns use gitignore-style globs relative to repo root.
+# - directory patterns ending with "/" match everything below that directory.
+
+defaults:
+  allow:
+    - "**"
+  deny:
+    - ".git/**"
+    - "**/.env"
+    - "**/.env.*"
+    - "**/*secret*"
+    - "**/*credential*"
+    - "**/*private*"
+    - "**/*.pem"
+    - "**/*.key"
+    - "**/*.p12"
+    - "**/*.pfx"
+
+repositories:
+  order-service:
+    allow:
+      - "**"
+    deny:
+      - ".git/**"
+      - "**/.env"
+      - "**/.env.*"
+      - "**/*secret*"
+      - "**/*credential*"
+      - "**/*private*"
+      - "**/*.pem"
+      - "**/*.key"
+      # Example business-sensitive areas that engineering can hide from PM-facing AI.
+      # - "payment/core/**"
+      # - "risk/core/**"
+      # - "security/**"

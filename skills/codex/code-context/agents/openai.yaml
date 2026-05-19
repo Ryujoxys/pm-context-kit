@@ -1,0 +1,15 @@
+interface:
+  display_name: "Code Context"
+  short_description: "PM-safe read-only code understanding"
+  brand_color: "#2563EB"
+  default_prompt: "Use $code-context to validate a product requirement against the current system behavior."
+
+dependencies:
+  tools:
+    - type: "mcp"
+      value: "code_context_mcp"
+      description: "Read-only code repository context tools"
+      transport: "stdio"
+
+policy:
+  allow_implicit_invocation: true

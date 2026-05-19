@@ -1,0 +1,17 @@
+[project]
+name = "code-context-mcp"
+version = "0.1.0"
+description = "Read-only MCP server for local mirrored code repositories."
+requires-python = ">=3.11"
+dependencies = [
+    "mcp>=1.2.0,<2",
+    "pathspec>=0.12.1,<1",
+    "pyyaml>=6.0.0,<7",
+]
+
+[project.scripts]
+code-context-mcp = "code_context_mcp.server:main"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
