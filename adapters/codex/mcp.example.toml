@@ -1,4 +1,9 @@
-# Example only. Exact Codex MCP config location depends on your Codex runtime.
+# Drop this block into your Codex MCP config file.
+# Common locations (verify against your Codex client version):
+#   - ~/.codex/config.toml
+#   - ~/.config/codex/config.toml
+#   - the per-project codex config if your client supports one
+# If unsure, check `codex --help` or your client's docs for the MCP config path.
 [mcp_servers.code-context]
 command = "uv"
 args = ["run", "--project", "/absolute/path/to/pm-context-kit/server", "code-context-mcp"]

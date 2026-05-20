@@ -25,11 +25,15 @@ services:
   repo-sync:
     build: ../sync
     container_name: code-context-repo-sync
+    # Per-repo auth tokens live in ../.env. Each entry in repos.yaml
+    # names the env vars it expects via auth.token_env / auth.username_env,
+    # and env_file passes them through without listing each one here.
+    env_file:
+      - path: ../.env
+        required: false
     environment:
       - CODE_CONTEXT_REPOS_ROOT=/repos
       - CODE_CONTEXT_CONFIG=/config/repos.yaml
-      - ORDER_SERVICE_GIT_TOKEN=${ORDER_SERVICE_GIT_TOKEN:-}
-      - ORDER_SERVICE_GIT_USERNAME=${ORDER_SERVICE_GIT_USERNAME:-}
     volumes:
       - ../config:/config:ro
       - ../repos:/repos
