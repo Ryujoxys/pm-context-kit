@@ -1,6 +1,6 @@
 [project]
 name = "code-context-mcp"
-version = "0.1.0"
+version = "0.2.0"
 description = "Read-only MCP server for local mirrored code repositories."
 requires-python = ">=3.11"
 dependencies = [
