@@ -16,6 +16,15 @@ from mcp.server.fastmcp import FastMCP
 DEFAULT_MAX_READ_CHARS = 80_000
 DEFAULT_MAX_SEARCH_RESULTS = 200
 DEFAULT_COMMAND_TIMEOUT = 30
+README_CANDIDATES = (
+    "README.md",
+    "README.MD",
+    "Readme.md",
+    "readme.md",
+    "README.rst",
+    "README.txt",
+    "README",
+)
 SKIP_DIRS = {
     ".git",
     ".hg",
@@ -54,8 +63,8 @@ class RepoConfig:
     owner: str = ""
     raw: dict[str, Any] | None = None
 
-    def public_dict(self) -> dict[str, Any]:
-        return {
+    def public_dict(self, include_stats: bool = True) -> dict[str, Any]:
+        data: dict[str, Any] = {
             "name": self.name,
             "provider": self.provider,
             "local_path": self.local_path,
@@ -67,6 +76,9 @@ class RepoConfig:
             "owner": self.owner,
             "exists": self.root.exists(),
         }
+        if include_stats:
+            data.update(_git_short_stats(self))
+        return data
 
     @property
     def root(self) -> Path:
@@ -317,6 +329,58 @@ def _run_command(args: list[str], cwd: Path | None = None, max_chars: int = 80_0
     }
 
 
+def _git_short_stats(repo: RepoConfig) -> dict[str, Any]:
+    root = repo.root
+    empty = {"head_commit": None, "last_commit_date": None, "current_branch": None}
+    if not root.exists() or not (root / ".git").exists():
+        return empty
+    head = _run_command(
+        ["git", "-C", str(root), "--no-pager", "log", "-1", "--pretty=format:%h%x09%ad", "--date=short"],
+        max_chars=200,
+    )
+    branch = _run_command(
+        ["git", "-C", str(root), "--no-pager", "branch", "--show-current"],
+        max_chars=200,
+    )
+    head_commit = None
+    last_commit_date = None
+    if head.get("ok") and head.get("stdout"):
+        parts = head["stdout"].strip().split("\t", 1)
+        if len(parts) == 2:
+            head_commit, last_commit_date = parts[0], parts[1]
+    current_branch = branch.get("stdout", "").strip() if branch.get("ok") else ""
+    return {
+        "head_commit": head_commit,
+        "last_commit_date": last_commit_date,
+        "current_branch": current_branch or None,
+    }
+
+
+def _parse_rg_match(line: str, base: Path) -> dict[str, Any] | None:
+    parts = line.split(":", 3)
+    if len(parts) != 4:
+        return None
+    path_str, line_no, col, text = parts
+    if not (line_no.isdigit() and col.isdigit()):
+        return None
+    rel = path_str
+    try:
+        abs_path = Path(path_str)
+        if abs_path.is_absolute():
+            try:
+                rel = str(abs_path.relative_to(base))
+            except ValueError:
+                rel = path_str
+    except (OSError, ValueError):
+        rel = path_str
+    return {
+        "path": rel,
+        "line": int(line_no),
+        "column": int(col),
+        "text": text,
+    }
+
+
 def _git_changed_paths(repo: RepoConfig, args_after_git: list[str]) -> list[str]:
     result = _run_command(
         ["git", "-C", str(repo.root), "--no-pager", *args_after_git],
@@ -357,14 +421,31 @@ def _validate_revision(revision: str, field_name: str = "revision") -> str:
 
 
 @mcp.tool()
-def code_context_list_repos() -> list[dict[str, Any]]:
-    """Read-only: list configured or discovered repositories and their business metadata."""
-    return [repo.public_dict() for repo in _all_repos()]
+def code_context_list_repos() -> dict[str, Any]:
+    """Read-only: list all configured or discovered repositories with business metadata and mirror freshness (head_commit, last_commit_date, current_branch).
+
+    Use this first when the PM has not named a specific repository, or to confirm which mirrors are available and recent.
+    """
+    repos = [repo.public_dict() for repo in _all_repos()]
+    if not repos:
+        return {
+            "count": 0,
+            "repos": [],
+            "hint": (
+                f"No repositories configured. Copy config/repos.example.yaml to {_config_path()} and "
+                f"list the repositories you want PMs to query, then run the repo sync step. "
+                f"You can also set CODE_CONTEXT_CONFIG and CODE_CONTEXT_REPOS_ROOT to point elsewhere."
+            ),
+        }
+    return {"count": len(repos), "repos": repos}
 
 
 @mcp.tool()
 def code_context_find_projects(query: str = "", tag: str = "", limit: int = 20) -> list[dict[str, Any]]:
-    """Read-only: search repository metadata by business term, name, tag, owner, provider, or description."""
+    """Read-only: find repositories by business term, tag, owner, provider, or description.
+
+    Use when the PM mentions a business concept (e.g. "refund", "下单", "user growth") but no specific repo name. Combine with code_context_list_facets to discover available tags and owners.
+    """
     q = query.strip().lower()
     tag_q = tag.strip().lower()
     capped_limit = max(1, min(limit, 100))
@@ -403,7 +484,10 @@ def code_context_find_projects(query: str = "", tag: str = "", limit: int = 20) 
 
 @mcp.tool()
 def code_context_get_project(name: str) -> dict[str, Any]:
-    """Read-only: get one repository's business metadata and local mirror status by name or local_path."""
+    """Read-only: get one repository's metadata and mirror freshness by name or local_path.
+
+    Use to confirm a repo exists, check its tags/owner, or report the latest synced commit.
+    """
     return _get_repo(name).public_dict()
 
 
@@ -414,7 +498,10 @@ def code_context_list_directory(
     include_hidden: bool = False,
     limit: int = 200,
 ) -> dict[str, Any]:
-    """Read-only: list files and directories inside a repository path."""
+    """Read-only: list files and directories at a repository path.
+
+    Use to map the layout when entry points are unclear, or to confirm a path exists before reading.
+    """
     repo_cfg = _get_repo(repo)
     target = _safe_visible_path(repo_cfg, path)
     if not target.exists():
@@ -469,7 +556,10 @@ def code_context_read_file(
     max_lines: int = 300,
     include_line_numbers: bool = True,
 ) -> dict[str, Any]:
-    """Read-only: read a text file from a repository, with line and byte limits."""
+    """Read-only: read a text file from a repository with line and byte limits.
+
+    Prefer the smallest relevant line range to keep PM-facing answers focused. For top-level repo intent, prefer code_context_get_readme.
+    """
     repo_cfg = _get_repo(repo)
     target = _safe_visible_path(repo_cfg, path)
     if not target.exists():
@@ -514,7 +604,10 @@ def code_context_read_file(
 
 @mcp.tool()
 def code_context_tree(repo: str, path: str = "", max_depth: int = 3, limit: int = 300) -> dict[str, Any]:
-    """Read-only: return a compact directory tree for a repository path."""
+    """Read-only: return a compact directory tree for a repository path.
+
+    Use for a fast structural overview before drilling into files. Cheaper than repeated list_directory calls.
+    """
     repo_cfg = _get_repo(repo)
     root = _safe_visible_path(repo_cfg, path)
     if not root.exists():
@@ -569,7 +662,10 @@ def code_context_search(
     file_glob: str = "",
     max_results: int = DEFAULT_MAX_SEARCH_RESULTS,
 ) -> dict[str, Any]:
-    """Read-only: search repository code with ripgrep. Pattern uses ripgrep regex syntax."""
+    """Read-only: ripgrep-powered code search across one repo or all configured repos.
+
+    Use for business terms, route names, status enums, table names, config keys, event names, job names, or feature flags. Pattern uses ripgrep regex syntax. Returns structured matches with path, line, column, and text.
+    """
     if not pattern or len(pattern) > 500:
         raise ValueError("pattern must be 1-500 characters")
     if shutil.which("rg") is None:
@@ -630,20 +726,28 @@ def code_context_search(
     else:
         lines = stdout.splitlines()
     selected = lines[:capped_limit]
+    matches: list[dict[str, Any]] = []
+    for raw in selected:
+        parsed = _parse_rg_match(raw, search_root)
+        if parsed is not None:
+            matches.append(parsed)
     return {
         "ok": True,
         "repo": repo_name,
         "search_root": str(search_root),
         "pattern": pattern,
-        "count": len(selected),
+        "count": len(matches),
         "truncated": len(lines) > capped_limit or bool(result.get("truncated")),
-        "matches": selected,
+        "matches": matches,
     }
 
 
 @mcp.tool()
 def code_context_git_log(repo: str, max_count: int = 20, path: str = "") -> dict[str, Any]:
-    """Read-only: show recent git commits for a repository or path."""
+    """Read-only: recent commits for a repository or path.
+
+    Use when the PM asks "what changed recently", "who worked on this", or wants release context. For cross-repo summaries, prefer code_context_recent_changes.
+    """
     repo_cfg = _get_repo(repo)
     capped = max(1, min(max_count, 100))
     args = [
@@ -672,7 +776,10 @@ def code_context_git_log(repo: str, max_count: int = 20, path: str = "") -> dict
 
 @mcp.tool()
 def code_context_git_show(repo: str, revision: str = "HEAD", max_chars: int = 60_000) -> dict[str, Any]:
-    """Read-only: show one git revision with stats and patch, capped by max_chars."""
+    """Read-only: full diff and stats for one revision.
+
+    Use to understand the substance of a specific commit (what was changed, which files, what user-visible behavior shifted).
+    """
     repo_cfg = _get_repo(repo)
     rev = _validate_revision(revision)
     changed = _git_changed_paths(repo_cfg, ["show", "--pretty=format:", "--name-only", rev])
@@ -706,7 +813,10 @@ def code_context_git_diff(
     path: str = "",
     max_chars: int = 80_000,
 ) -> dict[str, Any]:
-    """Read-only: show git diff between two revisions, optionally limited to one path."""
+    """Read-only: diff between two revisions, optionally limited to one path.
+
+    Use for "what shipped between v1 and v2" or release-window comparisons.
+    """
     repo_cfg = _get_repo(repo)
     base_rev = _validate_revision(base, "base")
     head_rev = _validate_revision(head, "head")
@@ -743,7 +853,10 @@ def code_context_git_blame(
     end_line: int = 80,
     max_chars: int = 80_000,
 ) -> dict[str, Any]:
-    """Read-only: show git blame for a bounded line range in one file."""
+    """Read-only: blame for a bounded line range in one file.
+
+    Use to find who introduced a rule, when a constant changed, or why a code path exists.
+    """
     repo_cfg = _get_repo(repo)
     target = _safe_visible_path(repo_cfg, path)
     if not target.is_file():
@@ -771,6 +884,146 @@ def code_context_git_blame(
         "start_line": safe_start,
         "end_line": safe_end,
         **result,
+    }
+
+
+@mcp.tool()
+def code_context_get_readme(repo: str, max_chars: int = 20_000) -> dict[str, Any]:
+    """Read-only: fetch the top-level README for a repository.
+
+    Use this as the first reading step to understand a repo's purpose, scope, and conventions before drilling into code. Looks for common README filenames (README.md, README.rst, README.txt, README) at the repo root.
+    """
+    repo_cfg = _get_repo(repo)
+    cap = max(1000, min(max_chars, 80_000))
+    for candidate in README_CANDIDATES:
+        target = repo_cfg.root / candidate
+        if not target.is_file():
+            continue
+        rel = _safe_display_path(repo_cfg, target)
+        if not _path_visible(repo_cfg, rel, is_dir=False):
+            continue
+        with target.open("rb") as f:
+            data = f.read(cap + 1)
+        truncated = len(data) > cap
+        data = data[:cap]
+        if b"\x00" in data[:8192]:
+            continue
+        return {
+            "ok": True,
+            "repo": repo_cfg.name,
+            "path": rel,
+            "content": data.decode("utf-8", errors="replace"),
+            "truncated": truncated,
+        }
+    return {
+        "ok": False,
+        "repo": repo_cfg.name,
+        "error": "no README file found at repo root within the visible code context",
+        "looked_for": list(README_CANDIDATES),
+    }
+
+
+@mcp.tool()
+def code_context_recent_changes(
+    repos: list[str] | None = None,
+    days: int = 7,
+    max_per_repo: int = 10,
+) -> dict[str, Any]:
+    """Read-only: cross-repo summary of recent commits.
+
+    Use when the PM asks "what shipped recently across these services" or wants a release pulse. If repos is empty, includes every existing configured repository. Results are sorted by commit volume.
+    """
+    capped_days = max(1, min(days, 90))
+    capped_per_repo = max(1, min(max_per_repo, 50))
+    since = f"{capped_days}.days.ago"
+
+    targets: list[RepoConfig] = []
+    missing: list[str] = []
+    if repos:
+        for name in repos:
+            try:
+                targets.append(_get_repo(name))
+            except (KeyError, FileNotFoundError):
+                missing.append(name)
+    else:
+        targets = [r for r in _all_repos() if r.root.exists()]
+
+    summaries: list[dict[str, Any]] = []
+    for repo in targets:
+        result = _run_command(
+            [
+                "git",
+                "-C",
+                str(repo.root),
+                "--no-pager",
+                "log",
+                f"--since={since}",
+                f"--max-count={capped_per_repo}",
+                "--date=iso",
+                "--pretty=format:%h%x09%ad%x09%an%x09%s",
+            ],
+            max_chars=40_000,
+        )
+        commits: list[dict[str, Any]] = []
+        if result.get("ok"):
+            for line in result.get("stdout", "").splitlines():
+                parts = line.split("\t", 3)
+                if len(parts) == 4:
+                    commits.append(
+                        {
+                            "hash": parts[0],
+                            "date": parts[1],
+                            "author": parts[2],
+                            "subject": parts[3],
+                        }
+                    )
+        summaries.append(
+            {
+                "repo": repo.name,
+                "commit_count": len(commits),
+                "commits": commits,
+            }
+        )
+    summaries.sort(key=lambda item: (item["commit_count"], item["repo"]), reverse=True)
+    return {
+        "ok": True,
+        "days": capped_days,
+        "max_per_repo": capped_per_repo,
+        "repo_count": len(summaries),
+        "missing_repos": missing,
+        "repos": summaries,
+    }
+
+
+@mcp.tool()
+def code_context_list_facets() -> dict[str, Any]:
+    """Read-only: enumerate available tags, owners, and providers across all configured repositories.
+
+    Use to discover faceted entry points before calling code_context_find_projects. Each facet entry has a value and a repo count, sorted by frequency.
+    """
+    tag_counts: dict[str, int] = {}
+    owner_counts: dict[str, int] = {}
+    provider_counts: dict[str, int] = {}
+    repos = _all_repos()
+    for repo in repos:
+        for tag in repo.tags:
+            tag_counts[tag] = tag_counts.get(tag, 0) + 1
+        if repo.owner:
+            owner_counts[repo.owner] = owner_counts.get(repo.owner, 0) + 1
+        if repo.provider:
+            provider_counts[repo.provider] = provider_counts.get(repo.provider, 0) + 1
+
+    def to_list(counts: dict[str, int]) -> list[dict[str, Any]]:
+        return [
+            {"value": value, "count": count}
+            for value, count in sorted(counts.items(), key=lambda item: (-item[1], item[0]))
+        ]
+
+    return {
+        "total_repos": len(repos),
+        "tags": to_list(tag_counts),
+        "owners": to_list(owner_counts),
+        "providers": to_list(provider_counts),
     }
 
 

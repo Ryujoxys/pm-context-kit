@@ -68,14 +68,17 @@ MCP 是核心能力，Skill 是可选增强。
 code_context_list_repos
 code_context_find_projects
 code_context_get_project
+code_context_list_facets
 code_context_list_directory
 code_context_read_file
+code_context_get_readme
 code_context_tree
 code_context_search
 code_context_git_log
 code_context_git_show
 code_context_git_diff
 code_context_git_blame
+code_context_recent_changes
 ```
 
 明确不支持：

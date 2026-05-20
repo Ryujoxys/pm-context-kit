@@ -18,12 +18,13 @@ Use this skill when a product manager or product-engineering team wants code-gro
 
 ## Investigation Flow
 
-1. Discover scope with `code_context_find_projects` or `code_context_list_repos`.
-2. Search broadly with business terms, English terms, route names, statuses, table names, config keys, event names, and job names using `code_context_search`.
-3. Map structure with `code_context_tree` or `code_context_list_directory` when entry points are unclear.
-4. Read only the smallest relevant files and line ranges with `code_context_read_file`.
-5. Use `code_context_git_log`, `code_context_git_show`, `code_context_git_diff`, or `code_context_git_blame` when the user asks about history, ownership, recent changes, or why a rule exists.
-6. Reconcile evidence across modules before summarizing.
+1. Discover scope. When the PM uses a business term but no repo name, start with `code_context_list_facets` to see available tags and owners, then `code_context_find_projects` with the term. Use `code_context_list_repos` only when you need the full inventory.
+2. Orient on the candidate repo with `code_context_get_readme` before deep diving. This sets the right vocabulary and module map.
+3. Search broadly with business terms, English terms, route names, statuses, table names, config keys, event names, and job names using `code_context_search`. Prefer per-repo search once a candidate is identified.
+4. Map structure with `code_context_tree` or `code_context_list_directory` when entry points are unclear.
+5. Read only the smallest relevant files and line ranges with `code_context_read_file`.
+6. For history questions: `code_context_recent_changes` for cross-repo "what shipped this week"; `code_context_git_log`, `code_context_git_show`, `code_context_git_diff`, or `code_context_git_blame` for single-repo depth.
+7. Reconcile evidence across modules before summarizing.
 
 ## Common Product Research Modes
 
