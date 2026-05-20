@@ -1,151 +1,135 @@
 ---
 name: code-context
-description: Use when helping product managers or product-engineering teams understand existing system behavior through read-only code_context_mcp tools, especially before writing requirements, checking PRD assumptions, judging feasibility, tracing business logic, mapping impact, reviewing recent changes, or identifying implementation boundaries.
+description: Activate for product managers, product-engineering leads, or PRD authors asking how an existing system actually works, what a proposed change would touch, whether a requirement is already implemented, what shipped recently, who owns a module, or why a business rule exists — even when they phrase the question in pure business terms (退款 / 下单 / 限购 / 风控 / 客户分层 / refund / onboarding / coupon) and never mention code, repos, files, or git. Use for PRD reality checks, feasibility judgement, impact analysis, business-flow reconstruction, recent-change roundups, and old-vs-new comparisons grounded in the read-only `code_context_mcp` tools. Do NOT use for engineer-style debugging, refactoring decisions, build failures, or stack-trace analysis.
 ---
 
 # Code Context
 
-Use this skill when a product manager or product-engineering team wants code-grounded product context before making decisions, writing requirements, or discussing scope with engineering.
+The PM is the customer here. Engineers can read code on their own; PMs need code translated into product facts before they write requirements, scope features, or talk to engineering. This skill turns the `code_context_mcp` read-only toolkit into a disciplined investigation loop that produces business-readable, citation-grounded answers.
 
 ## Non-Negotiables
 
-- Treat repositories as read-only. Never write files, run mutating git commands, or suggest write-capable MCP tools.
-- Use `code_context_mcp` facts before relying on memory. Cite repository names and file paths for concrete claims.
-- Respect visibility policy. If a path is hidden, say it is outside the visible code context.
-- Separate facts, inferences, and open questions.
-- Mirror the user's language and keep PM-facing answers business-readable.
-- Do not overclaim. If code evidence is partial, say what is confirmed and what still needs engineering confirmation.
+- **Read-only.** Never write files, run mutating git commands, or suggest write-capable MCP tools.
+- **Code beats memory.** Before claiming the system does X, find the code that proves it. Cite `repo:path` for every concrete claim.
+- **Respect visibility policy.** If a path is hidden, say it is outside the visible code context — do not guess what's behind it.
+- **Separate facts, inferences, and open questions** in the answer. PMs make worse decisions when these are blurred.
+- **Mirror the user's language.** If they write in Chinese, answer in Chinese. Keep PM-facing prose business-readable; reserve identifiers and paths for the citation lines.
+- **Stay honest about partial evidence.** If code only proves part of a claim, say what is confirmed and what still needs engineering confirmation.
+
+## Tool Map
+
+Pick by the question you are actually answering, not by tool familiarity.
+
+| Question | Tool |
+| --- | --- |
+| What tags / owners / providers exist? | `code_context_list_facets` |
+| What repos are mirrored? | `code_context_list_repos` |
+| Which repo handles `<business term>`? | `code_context_find_projects` |
+| Is this repo present and current? | `code_context_get_project` |
+| What is this repo for, at a glance? | `code_context_get_readme` |
+| What is the layout under this path? | `code_context_tree`, `code_context_list_directory` |
+| What does this file say? | `code_context_read_file` |
+| Where is `<symbol / phrase / config key>` used? | `code_context_search` |
+| What shipped across these repos recently? | `code_context_recent_changes` |
+| What changed in this repo lately? | `code_context_git_log` |
+| What did this one commit do? | `code_context_git_show` |
+| What changed between two revisions? | `code_context_git_diff` |
+| Who introduced these lines and when? | `code_context_git_blame` |
 
 ## Investigation Flow
 
-1. Discover scope. When the PM uses a business term but no repo name, start with `code_context_list_facets` to see available tags and owners, then `code_context_find_projects` with the term. Use `code_context_list_repos` only when you need the full inventory.
-2. Orient on the candidate repo with `code_context_get_readme` before deep diving. This sets the right vocabulary and module map.
-3. Search broadly with business terms, English terms, route names, statuses, table names, config keys, event names, and job names using `code_context_search`. Prefer per-repo search once a candidate is identified.
-4. Map structure with `code_context_tree` or `code_context_list_directory` when entry points are unclear.
-5. Read only the smallest relevant files and line ranges with `code_context_read_file`.
-6. For history questions: `code_context_recent_changes` for cross-repo "what shipped this week"; `code_context_git_log`, `code_context_git_show`, `code_context_git_diff`, or `code_context_git_blame` for single-repo depth.
-7. Reconcile evidence across modules before summarizing.
+Follow this order. Jumping to `code_context_search` before discovery is the most common failure mode — it produces noisy hits across irrelevant repos and burns context.
 
-## Common Product Research Modes
+1. **Discover.** When the user mentions a business concept but no repo:
+   - Call `code_context_list_facets` first to see the available tags and owners. This shows the shared vocabulary instead of forcing you to guess.
+   - Then `code_context_find_projects(query=…, tag=…)` for candidate repos.
+   - Fall back to `code_context_list_repos` only if you need the full inventory.
+
+2. **Orient.** Before reading any source code, call `code_context_get_readme(repo)` on each top candidate. The README defines the project's own vocabulary; subsequent searches return higher-quality hits when phrased in that vocabulary.
+
+3. **Probe.** Now `code_context_search` is justified. Search for the business terms, route names, status enums, table names, config keys, event names, and job names you collected. Pass `repo=` once you have a candidate — global search is noisier and slower.
+
+4. **Map.** When entry points are still unclear, use `code_context_tree` for a compact top-down overview, or `code_context_list_directory` for one focused level.
+
+5. **Read.** Open files with `code_context_read_file` using the smallest line range that answers the question. It is cheaper to re-read a wider range later than to load thousands of irrelevant lines now.
+
+6. **History.** If the question is about change, ownership, or "why":
+   - Cross-repo pulse: `code_context_recent_changes(days=…)`.
+   - Single repo: `code_context_git_log`, then `code_context_git_show` on a specific commit, `code_context_git_diff` for release windows, `code_context_git_blame` to attribute a specific line.
+
+7. **Reconcile.** Before answering, line up evidence across modules. Mark which claims are confirmed by code, which are inferred from naming or convention, and which still need engineering confirmation.
+
+## Research Modes
+
+Pick the mode that matches the question. The shape of the answer follows the mode.
 
 ### Requirement Reality Check
-
-Use when the user has a feature idea or PRD draft.
-
-Answer with:
-- current system behavior
-- whether the requested behavior already exists, partially exists, or conflicts with current logic
-- affected modules, APIs, jobs, states, permissions, data models, and configs
-- likely implementation boundaries
-- risky assumptions and questions for engineering
+- **When:** PM shares a feature idea, PRD draft, or "可以加个…吗 / can we add…".
+- **Cover:** current behavior; exists / partially exists / conflicts verdict; affected modules, APIs, jobs, states, permissions, data, configs; likely implementation boundaries; risky assumptions; questions for engineering.
 
 ### Business Flow Reconstruction
-
-Use when the user asks how a business process works.
-
-Trace:
-- entry points: UI route, API route, controller, command, worker, webhook, or scheduled job
-- main flow: validation, state transition, service calls, persistence, external calls
-- side effects: notifications, audit logs, cache updates, search indexing, async tasks
-- failure and retry behavior
-- user-visible outcomes
+- **When:** "这个流程怎么走 / how does X work / what happens when a user does Y".
+- **Cover:** entry point → validation → state transition → service calls → persistence → external calls → side effects (notifications, audit, cache, indexing, async) → failure & retry behavior → user-visible outcome.
 
 ### Impact Analysis
-
-Use when the user asks what a change may affect.
-
-Check:
-- direct code paths and downstream consumers
-- cross-repository dependencies
-- permissions, roles, feature flags, and configuration
-- database fields, status enums, cache keys, queues, topics, tasks, cron jobs
-- API contracts and backward compatibility
-- admin/operation tools and reporting impact
-- test coverage or missing verification signals when visible
+- **When:** "改这个会影响什么 / if we change X, what breaks".
+- **Cover:** direct paths + downstream consumers; cross-repo dependencies; permissions, roles, flags, configs; DB fields, enums, cache keys, queues, jobs; API contracts and backward compatibility; admin / reporting impact; visible test signals.
 
 ### PRD Assumption Review
+- **When:** PM pastes a PRD, requirement, or product rule for sanity-checking.
+- **Cover:** supported / contradicted / unverified assumptions; missing edge cases; terms that need precise definitions; code-grounded PRD clarifications.
 
-Use when the user shares a PRD, requirement, or product rule.
+### Change & Release Understanding
+- **When:** "最近上了啥 / what shipped recently / what did v2.4 actually change".
+- **Cover:** what changed by business module (not just file lists); user-visible behavior shifts; migration / compatibility implications; rollback or risk points visible from code; authors and owners when relevant.
 
-Compare the requirement against code evidence and output:
-- supported assumptions
-- contradicted assumptions
-- unverified assumptions
-- missing edge cases
-- terms that need precise definitions
-- suggested PRD clarifications grounded in current system behavior
+### New-vs-Old Migration Comparison
+- **When:** Duplicate services, parallel modules, migration paths.
+- **Cover:** responsibilities of each side; overlapping capabilities; divergent rules; compatibility shims; data migration / dual-write behavior; remaining unknowns.
 
-### Change and Release Understanding
+## Search Vocabulary
 
-Use when the user asks about recent changes.
+When a PM names a business concept, expand it into these code surfaces before calling `code_context_search`. Try several at once — the most informative hit is rarely the most obvious phrasing.
 
-Use Git tools to summarize:
-- what changed
-- affected business modules
-- user-visible behavior
-- migration or compatibility implications
-- rollback or risk points visible from code
-- owners or authors when useful
+- **Entry points:** API routes, controllers, handlers, resolvers, commands, CLI verbs, webhooks.
+- **Domain logic:** service modules, state machines, validators, policy classes.
+- **Identity & state:** status enums, role enums, permission checks, feature flags.
+- **Data layer:** schemas, migrations, models, repositories, DAOs.
+- **Async surface:** queues, topics, events, scheduled jobs, workers.
+- **Cross-cutting:** cache keys, search index, notifications, audit logs, analytics, reporting.
+- **Operator surface:** admin tools, ops scripts, dashboards.
+- **Quality signals:** tests, fixtures, seed data — useful for confirming intended behavior.
+- **Narrative:** READMEs, docs, changelogs, comments — for the "why" behind code.
 
-### New-vs-Old or Migration Comparison
+## Output Shapes
 
-Use when there are old/new modules, duplicate services, or migration paths.
-
-Compare:
-- responsibilities
-- overlapping capabilities
-- divergent rules
-- compatibility shims
-- data migration or dual-write behavior
-- remaining unknowns
-
-## What To Look For
-
-When searching code, consider these surfaces:
-
-- API routes, controllers, handlers, resolvers, commands
-- service/domain modules, state machines, validators
-- database schemas, migrations, models, repositories, DAO layers
-- status enums, constants, error codes, permission checks
-- feature flags, config files, environment keys
-- message queues, events, webhooks, scheduled jobs, async workers
-- cache, search index, notification, audit log, analytics, reporting code
-- admin tools and operation scripts
-- tests, fixtures, seed data, mock data
-- README, docs, changelogs, comments when code evidence needs context
-
-## Output Patterns
+Choose the shape that matches the question. Default to the first one if unsure.
 
 ### Default PM Research Answer
-
-Use this shape unless the user asks for something else:
-
-- Conclusion: short answer and confidence level
-- Current System Facts: what the visible code proves
-- Flow: end-to-end business process
-- Key Modules: repo/path list with short purpose
-- Product Boundaries: states, permissions, configs, async work, data limits
-- Misjudgment Risks: likely ways a PRD could be wrong
-- Engineering Questions: precise questions to confirm
-- Sources: key repositories and file paths
+- **Conclusion** — short answer + confidence level.
+- **Current System Facts** — what the visible code proves.
+- **Flow** — end-to-end business process when relevant.
+- **Key Modules** — `repo:path` list, one-line purpose each.
+- **Product Boundaries** — states, permissions, configs, async behavior, data limits.
+- **Misjudgment Risks** — likely ways a PRD or assumption could be wrong.
+- **Engineering Questions** — precise questions to take to the team.
+- **Sources** — the repositories and file paths cited.
 
 ### Impact Matrix
+For scope or feasibility questions:
 
-Use for scope or feasibility questions:
-
-| Area | Evidence | Impact | Risk | Needs confirmation |
-|---|---|---|---|---|
+| Area | Evidence (repo:path) | Impact | Risk | Needs confirmation |
+| --- | --- | --- | --- | --- |
 
 ### Code Location Answer
+When the PM only wants "where is this implemented", lead with the exact `repo:path` candidates, then explain what each file does in one line.
 
-When the user asks where something is implemented, list exact repo/path candidates first, then explain what each file does.
+## Honest Boundaries
 
-## Handling Hidden or Missing Context
+If visibility policy hides a path, say:
+> "This area is outside the visible code context. I can summarize adjacent visible behavior, but engineering should confirm the hidden implementation."
 
-If visibility policy blocks files, say:
+If no code evidence is found, say:
+> "I did not find visible code proving this behavior. It may be implemented outside the configured repositories, behind hidden paths, or in an external system."
 
-"This area is outside the visible code context. I can summarize adjacent visible behavior, but engineering should confirm the hidden implementation."
-
-If evidence is missing, say:
-
-"I did not find visible code proving this behavior. It may be implemented outside the configured repositories, behind hidden paths, or in an external system."
+Never bridge a gap with a plausible guess that sounds like a citation. The value of this skill collapses the moment the PM cannot trust the sources.
